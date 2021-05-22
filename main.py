@@ -17,7 +17,7 @@ audio file types.
 """
 
 import atexit
-import os
+import os, sys
 from glob import glob
 import time
 import random
@@ -26,36 +26,67 @@ import pickle
 from song import Song
 from hardware_controller import ShiftRegister
 
-
-# functions ===
-def generate_playlist():
-    """generate a list of random songs"""
-    directory = os.getcwd()
-    # songs = glob(directory + '/songs/*.mp3')  # use this if reading mp3 files
-    songs = glob(directory + '/songs/*.wav')  # use this if reading wav files
-    random.shuffle(songs)
-    
-    return len(songs), songs
-
-
 class Lightshow(object):
     """Lightshow class contains info about the current playback status of the song.
     User input will run event handlers above which can trigger methods in the lightshow object."""
 
     def __init__(self,
-                 paused=False):
+                 paused=False,
+                 playlist=[],
+                 song_index=0):
 
         self.paused = paused
+        self.playlist = playlist
+        self.song_index = song_index
 
         atexit.register(self.exit_function)
+        Lightshow.generate_playlist()
+
+    def generate_playlist(self):
+        directory = os.getcwd()
+        # songs = glob(directory + '/songs/*.mp3')  # use this if reading mp3 files
+        self.playlist = glob(directory + '/songs/*.wav')  # use this if reading wav files
+        random.shuffle(self.playlist)
+
+    def next_song(self):
+        print('play the next song')
+        if self.song_index == len(self.playlist)-1:  # last song
+            self.song_index = 0
+        else:
+            self.song_index += 1
+        Lightshow.run(self.playlist[self.song_index])
+
+    def prev_song(self):
+        print('play previous song')
+        if self.song_index > 1: # not the first song in the list
+            self.song_index -= 1
+        Lightshow.run(self.playlist[self.song_index])
+
+    def pause_play(self):
+        if self.paused:
+            print('starting to play after being paused')
+            pygame.mixer.music.play()
+            self.paused = False
+        else:
+            print('pausing song...')
+            pygame.mixer.music.pause()
+            self.paused = True
 
     def exit_function(self):
         """exit function"""
-        print('in the exit_function method of the lightshow class...')
-        # put code here to stop the lightshow
+        pygame.mixer.fadeout(1000)  # fade away the music for 1 second
+        sys.exit
 
-    def start_show(self, song):
+    def run(self, song):
         """Start the lightshow for a song that has been analyzed"""
+        song_title = song.title().split('\\')[-1].split('.')[0]
+        try:  # see if there is a pickle for this song already
+            with open('./song_pickles/{}.pkl'.format(song_title), 'rb') as fp:
+                current_song = pickle.load(fp)
+        except FileNotFoundError:  # no pickle for this song
+            print('no pickle for current song: {}'.format(song_title))
+            Lightshow.next_song()
+            # current_song = Song(audio_file, song_title)  # create a song object if running on a windows machine
         pygame.mixer.music.load(song)
         start = time.time()
         pygame.mixer.music.play()
@@ -83,17 +114,6 @@ if __name__ == "__main__":  # run the following code if running main.py directly
     U2 = ShiftRegister(36, 32, 38, 40)
     U3 = ShiftRegister(11, 7, 13, 15)
     U4 = ShiftRegister(16, 12, 18, 22)
-    playlist_len, playlist = generate_playlist()  # create a playlist from the songs in the current directory
     pygame.mixer.init()
-    print('playlist length: {}'.format(playlist_len))
-    for audio_file in playlist:
-        song_title = audio_file.title().split('\\')[-1].split('.')[0]
-        try:  # see if there is a pickle for this song already
-            with open('./song_pickles/{}.pkl'.format(song_title), 'rb') as fp:
-                current_song = pickle.load(fp)
-                print('now playing: {}'.format(song_title))
-        except FileNotFoundError:  # no pickle for this song
-            print('no pickle for current song: {}'.format(song_title))
-            current_song = Song(audio_file, song_title)  # create a song object
-
-        lightshow.start_show(audio_file)
+    for audio_file in lightshow.playlist:
+        lightshow.run(audio_file)
