@@ -24,7 +24,7 @@ import random
 import pygame
 import pickle
 from song import Song
-from hardware_controller import ShiftRegister
+from hardware_controller import ShiftRegister, Pi
 
 class Lightshow(object):
     """Lightshow class contains info about the current playback status of the song.
@@ -79,36 +79,33 @@ class Lightshow(object):
 
     def run(self, song):
         """Start the lightshow for a song that has been analyzed"""
-        song_title = song.title().split('\\')[-1].split('.')[0]
+        song_title = song.title().split('/')[-1].split('.')[0]
         try:  # see if there is a pickle for this song already
             with open('./song_pickles/{}.pkl'.format(song_title), 'rb') as fp:
                 current_song = pickle.load(fp)
         except FileNotFoundError:  # no pickle for this song
             print('no pickle for current song: {}'.format(song_title))
-            Lightshow.next_song()
-            # current_song = Song(audio_file, song_title)  # create a song object if running on a windows machine
+            Lightshow.next_song()  # move on to the next song if a pickle hasn't been generated yet
+            
         pygame.mixer.music.load(song)
-        start = time.time()
         pygame.mixer.music.play()
-        time.sleep(current_song.sleep_times[0])  # sleep until the first beat
-        end = time.time()
-        print('the time taken from playing the song to the first beat: {}'.format(end-start))
+        time.sleep(current_song.sleep_times[0]+ 0.1)  # sleep until the first beat, with some extra amount for the execution time
+
         for chunk in range(1, len(current_song.sleep_times)):
-            # U1.readBitList(current_song.lightshow_data[chunk][0])
-            # U2.readBitList(current_song.lightshow_data[chunk][1])
-            # U3.readBitList(current_song.lightshow_data[chunk][2])
-            # U4.readBitList(current_song.lightshow_data[chunk][3])
-            print('f1: {}'.format(current_song.lightshow_data[chunk][0]))
+            U1.readBitList(current_song.lightshow_data[chunk][0])
+            U2.readBitList(current_song.lightshow_data[chunk][1])
+            U3.readBitList(current_song.lightshow_data[chunk][2])
+            U4.readBitList(current_song.lightshow_data[chunk][3])
             time.sleep(current_song.sleep_times[chunk] * 0.75)  # keep the lights on for 75% of the chunk time
-            # U1.clear()
-            # U2.clear()
-            # U3.clear()
-            # U4.clear()
+            U1.clear()
+            U2.clear()
+            U3.clear()
+            U4.clear()
             time.sleep(current_song.sleep_times[chunk] * 0.245)  # turn the lights off for ~25% of the chunk time
 
 
-if __name__ == "__main__":  # run the following code if running main.py directly (not imported)
-
+if __name__ == "__main__":  # run the following code if running main.py directly
+    raspberry = Pi()  # create a pi object
     lightshow = Lightshow()  # declare a lightshow object
     U1 = ShiftRegister(33, 35, 31, 37)  # declare the shift register objects (dataPin, serialClock, latchPin, outEnable)
     U2 = ShiftRegister(36, 32, 38, 40)

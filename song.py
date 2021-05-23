@@ -2,11 +2,12 @@
 Song information to be saved and loaded from pickle files.
 """
 
+import os
 import pickle
 import statistics
-
+from glob import glob
 import librosa as lr
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -37,16 +38,19 @@ class Song(object):
         self.num_chunks = num_chunks  # how many chunks the song is broken into for frequency analysis
         self.freq_bins = freq_bins  # upper cutoffs of frequency bins [Hz]
         self.lightshow_data = lightshow_data  # numpy 2d array of binary data x number of freq bins
-
+        
         Song.generate_pickle(self)
 
     def generate_pickle(self):
         """
         open a pickle of the song data or create one if it doesn't exist.
         """
-        amplitude_data = Song.compute_amplitude(self)  # obtain time series data
-        Song.beat_tracking(self, amplitude_data=amplitude_data)  # determine beat locations
-        Song.compute_lightshow_data(self, amplitude_data=amplitude_data)  # determine binary lists for shift registers
+        amplitude_data = self.compute_amplitude(self)  # obtain time series data
+        self.beat_tracking(self, amplitude_data=amplitude_data)  # determine beat locations
+        self.compute_lightshow_data(self, amplitude_data=amplitude_data)  # determine binary lists for shift registers
+        disp_song_data = input('plot song data? [Y/N]:   ')
+        if disp_song_data == 'Y' or 'y':
+            self.plot_song_data(self)
 
         with open('./song_pickles/{}.pkl'.format(self.title), 'wb') as output:
             pickle.dump(self, output, protocol=4)
@@ -115,19 +119,24 @@ class Song(object):
                     self.lightshow_data[chunk][i] = '11111111'
                 i += 1
 
-    # def plot_song_data(self):
-    #     pass
-    # fig, (ax1, ax2) = plt.subplots(2, 1)
-    # ax1.plot(self.amplitude_data)
-    # ax2.plot(self.timestamps, self.lightshow_data['F1'], label='F1')
-    # ax2.plot(self.timestamps, self.lightshow_data['F2'], label='F2')
-    # ax2.plot(self.timestamps, self.lightshow_data['F3'], label='F3')
-    # ax2.plot(self.timestamps, self.lightshow_data['F4'], label='F4')
-    # ax2.set_yscale('log')
-    # ax2.legend()
+    def plot_song_data(self):
+        fig, (ax1, ax2) = plt.subplots(2, 1)
+        ax1.plot(self.amplitude_data)
+        ax2.plot(self.timestamps, self.lightshow_data['F1'], label='F1')
+        ax2.plot(self.timestamps, self.lightshow_data['F2'], label='F2')
+        ax2.plot(self.timestamps, self.lightshow_data['F3'], label='F3')
+        ax2.plot(self.timestamps, self.lightshow_data['F4'], label='F4')
+        ax2.set_yscale('log')
+        ax2.legend()
 
-    # when plotting the FFT values for each time chunk in the song use this approach...
-    # frequency_vec = self.sample_rate * np.arange((n / 2)) / n  # frequency vector
-    # plt.plot(frequency_vec[0:len(y_k_power)], y_k_power)
+        # when plotting the FFT values for each time chunk in the song use this approach...
+        # frequency_vec = self.sample_rate * np.arange((n / 2)) / n  # frequency vector
+        # plt.plot(frequency_vec[0:len(y_k_power)], y_k_power)
 
-    # plt.show()
+        plt.show()
+
+directory = os.getcwd()
+playlist = glob(directory + '/songs/*.wav')
+for audio_file in playlist:
+    song_title = audio_file.title().split('/')[-1].split('.')[0]
+    current_song = Song(audio_file, song_title)  # create a song object which generates a pickle for the song
