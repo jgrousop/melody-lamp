@@ -24,7 +24,23 @@ import random
 import pygame
 import pickle
 from song import Song
-from hardware_controller import ShiftRegister, Pi
+from hardware_controller import *
+
+# callbacks ===
+def next_song(channel):
+    print('now find a way to stop the song and play the next')
+    global next_request
+    next_request = True
+
+def prev_song(channel):
+    print('now find a way to stop the song and play the next')
+    global pre_request
+    pre_request = True
+
+def pause_play(channel):
+    print('now find a way to stop the song and play the next')
+    global pause_request
+    pause_request = True
 
 class Lightshow(object):
     """Lightshow class contains info about the current playback status of the song.
@@ -40,7 +56,7 @@ class Lightshow(object):
         self.song_index = song_index
 
         atexit.register(self.exit_function)
-        Lightshow.generate_playlist()
+        Lightshow.generate_playlist(self)
 
     def generate_playlist(self):
         directory = os.getcwd()
@@ -102,10 +118,25 @@ class Lightshow(object):
             U3.clear()
             U4.clear()
             time.sleep(current_song.sleep_times[chunk] * 0.245)  # turn the lights off for ~25% of the chunk time
+            if next_request:
+                self.next_song(self)
+                next_request = False
+            elif pre_request:
+                self.prev_song(self)
+                pre_request = False
+            elif pause_request:
+                self.pause_play(self)
+                pause_request = False
 
 
 if __name__ == "__main__":  # run the following code if running main.py directly
     raspberry = Pi()  # create a pi object
+    global next_request
+    global pre_request
+    global pause_request
+    next_request = False
+    pre_request = False
+    pause_request = False
     lightshow = Lightshow()  # declare a lightshow object
     U1 = ShiftRegister(33, 35, 31, 37)  # declare the shift register objects (dataPin, serialClock, latchPin, outEnable)
     U2 = ShiftRegister(36, 32, 38, 40)

@@ -7,23 +7,13 @@ try:  # RPi.GPIO only works on the Raspberry Pi.
     import RPi.GPIO as GPIO
 except RuntimeError:
     print('Error importing RPi.GPIO! This is probably because you need superuser privileges or are not on a raspberry pi.')
-from main import Lightshow
-
-# event handlers ===
-def next_song(channel):
-    Lightshow.next_song()
-
-def prev_song(channel):
-    Lightshow.prev_song()
-
-def pause_play(channel):
-    Lightshow.pause_play()
+import main
 
 class Pi(object):
     def __init__(self):
         self.next_pin = 24
         self.prev_pin = 26
-        self.pause_pin = 28
+        self.pause_pin = 23
 
         self.setup()
     
@@ -35,9 +25,9 @@ class Pi(object):
         GPIO.setup(self.next_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)    # set as input (button)  
         GPIO.setup(self.prev_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)    # set as input (button)  
         GPIO.setup(self.pause_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)    # set as input (button)  
-        GPIO.add_event_detect(self.next_pin, GPIO.RISING, callback=next_song)
-        GPIO.add_event_detect(self.prev_pin, GPIO.RISING, callback=prev_song)
-        GPIO.add_event_detect(self.pause_pin, GPIO.RISING, callback=pause_play)
+        GPIO.add_event_detect(self.next_pin, GPIO.RISING, callback=main.next_song, bouncetime=300)
+        GPIO.add_event_detect(self.prev_pin, GPIO.RISING, callback=main.prev_song, bouncetime=300)
+        GPIO.add_event_detect(self.pause_pin, GPIO.RISING, callback=main.pause_play, bouncetime=300)
 
 class ShiftRegister(object):
     def __init__(self, dataPin, serialClock, latchPin,  outEnable):
