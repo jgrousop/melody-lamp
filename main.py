@@ -1,4 +1,6 @@
-"""MAIN CODE FOR RPI MUSIC VISUALIZER
+"""
+RPI MELODY LAMP =-=-
+JOHN GROUSOPOULOS =-=-
 Play any audio file and synchronize lights to the music
 
 The timing of the lights turning on and off is based upon the frequency
@@ -10,138 +12,111 @@ FFT calculation can be CPU intensive and in some cases can adversely
 affect playback of songs (especially if attempting to decode the song
 as well, as is the case for an mp3).  For this reason, the FFT
 calculations are cached after the first time a new song is played on a windows machine.
-The values are cached in a pickle file in the song-pickle folder.  Subsequent requests to play the same song will use the
-cached information and not recompute the FFT, thus reducing CPU
-utilization dramatically and allowing for clear music playback of all
-audio file types.
+The values are cached in a pickle file in the song-pickle folder.  Subsequent requests 
+to play the same song will use the cached information and not recompute the FFT, 
+thus reducing CPU use dramatically and allowing for clear music playback of all audio file types.
+
+NOTES =-=-=-=-
+- edit the raspberry pi crontab by opening a terminal and typing crontab -e then enter the following
+at the end of the file:
+@reboot /usr/bin/python3 /home/pi/lightshow/main.py 
 """
 
-import atexit
-import os, sys
+import subprocess
+from time import sleep
+import os
 from glob import glob
-import time
 import random
-import pygame
 import pickle
-from song import Song
 from hardware_controller import *
 
-# callbacks ===
-def next_song(channel):
-    print('now find a way to stop the song and play the next')
-    global next_request
-    next_request = True
-
-def prev_song(channel):
-    print('now find a way to stop the song and play the next')
-    global pre_request
-    pre_request = True
-
-def pause_play(channel):
-    print('now find a way to stop the song and play the next')
-    global pause_request
-    pause_request = True
 
 class Lightshow(object):
     """Lightshow class contains info about the current playback status of the song.
-    User input will run event handlers above which can trigger methods in the lightshow object."""
+    User input will run event handlers which update global variables to control the show."""
 
     def __init__(self,
-                 paused=False,
                  playlist=[],
                  song_index=0):
 
-        self.paused = paused
         self.playlist = playlist
         self.song_index = song_index
-
-        atexit.register(self.exit_function)
-        Lightshow.generate_playlist(self)
+        self.current_song = None
+        self.current_song_title = ''
+        self.music_filetype = 'wav'
+        
+        self.generate_playlist()
 
     def generate_playlist(self):
         directory = os.getcwd()
-        # songs = glob(directory + '/songs/*.mp3')  # use this if reading mp3 files
-        self.playlist = glob(directory + '/songs/*.wav')  # use this if reading wav files
+        self.playlist = glob(directory + '/songs/*.{}'.format(self.music_filetype))
         random.shuffle(self.playlist)
-
-    def next_song(self):
-        print('play the next song')
-        if self.song_index == len(self.playlist)-1:  # last song
-            self.song_index = 0
-        else:
-            self.song_index += 1
-        Lightshow.run(self.playlist[self.song_index])
-
-    def prev_song(self):
-        print('play previous song')
-        if self.song_index > 1: # not the first song in the list
-            self.song_index -= 1
-        Lightshow.run(self.playlist[self.song_index])
-
-    def pause_play(self):
-        if self.paused:
-            print('starting to play after being paused')
-            pygame.mixer.music.play()
-            self.paused = False
-        else:
-            print('pausing song...')
-            pygame.mixer.music.pause()
-            self.paused = True
-
-    def exit_function(self):
-        """exit function"""
-        pygame.mixer.fadeout(1000)  # fade away the music for 1 second
-        sys.exit
 
     def run(self, song):
         """Start the lightshow for a song that has been analyzed"""
-        song_title = song.title().split('/')[-1].split('.')[0]
-        try:  # see if there is a pickle for this song already
-            with open('./song_pickles/{}.pkl'.format(song_title), 'rb') as fp:
-                current_song = pickle.load(fp)
-        except FileNotFoundError:  # no pickle for this song
-            print('no pickle for current song: {}'.format(song_title))
-            Lightshow.next_song()  # move on to the next song if a pickle hasn't been generated yet
-            
-        pygame.mixer.music.load(song)
-        pygame.mixer.music.play()
-        time.sleep(current_song.sleep_times[0]+ 0.1)  # sleep until the first beat, with some extra amount for the execution time
+        global paused
+        global next_song
+        global prev_song
 
-        for chunk in range(1, len(current_song.sleep_times)):
-            U1.readBitList(current_song.lightshow_data[chunk][0])
-            U2.readBitList(current_song.lightshow_data[chunk][1])
-            U3.readBitList(current_song.lightshow_data[chunk][2])
-            U4.readBitList(current_song.lightshow_data[chunk][3])
-            time.sleep(current_song.sleep_times[chunk] * 0.75)  # keep the lights on for 75% of the chunk time
+        self.current_song_title = song.title().split('/')[-1].split('.')[0]
+
+        try:  # see if there is a pickle for this song already
+            with open('./song_pickles/{}.pkl'.format(self.current_song_title), 'rb') as fp:
+                self.current_song = pickle.load(fp)
+        except FileNotFoundError:  # no pickle for this song
+            print('no pickle for current song: {}'.format(self.current_song_title))
+            Lightshow.go_next()  # move on to the next song if a pickle hasn't been generated yet
+            
+        # start omxplayer to hear the music
+        omxprocess = subprocess.Popen(['omxplayer','-o','local','/home/pi/lightshow/songs/{}.wav'.format(self.current_song_title)],
+                                stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                bufsize=0,
+                                close_fds=True)
+
+        sleep(self.current_song.sleep_times[0])  # sleep until the first beat
+        
+        for chunk in range(1, len(self.current_song.sleep_times)):
+            U1.readBitList(self.current_song.lightshow_data[chunk][0])
+            U2.readBitList(self.current_song.lightshow_data[chunk][1])
+            U3.readBitList(self.current_song.lightshow_data[chunk][2])
+            U4.readBitList(self.current_song.lightshow_data[chunk][3])
+            sleep(self.current_song.sleep_times[chunk] * 0.75)  # keep the lights on for 75% of the chunk time
             U1.clear()
             U2.clear()
             U3.clear()
             U4.clear()
-            time.sleep(current_song.sleep_times[chunk] * 0.245)  # turn the lights off for ~25% of the chunk time
-            if next_request:
-                self.next_song(self)
-                next_request = False
-            elif pre_request:
-                self.prev_song(self)
-                pre_request = False
-            elif pause_request:
-                self.pause_play(self)
-                pause_request = False
+            sleep(self.current_song.sleep_times[chunk] * 0.245)  # turn the lights off for ~25% of the chunk time
 
+            if paused: # the user has pressed the pause button
+                omxprocess.stdin.write(b'p')
+                while paused:
+                    sleep(0.25)  # keep waiting until the user presses the pause button again
+
+            elif next_song: # the user has pressed the next_song button
+                next_song = False
+                omxprocess.stdin.write(b'q')  # quit the current music playback process
+                if self.song_index < len(self.playlist):
+                    self.song_index += 1 # go back to the first song if next is pressed on the last song
+                self.run(self.playlist[self.song_index])
+
+            elif prev_song: # the user has pressed the prev_song button
+                prev_song = False
+                omxprocess.stdin.write(b'q')  # quit the current music playback process
+                if self.song_index > 0:
+                    self.song_index -= 1
+                self.run(self.playlist[self.song_index])
+                    
 
 if __name__ == "__main__":  # run the following code if running main.py directly
-    raspberry = Pi()  # create a pi object
-    global next_request
-    global pre_request
-    global pause_request
-    next_request = False
-    pre_request = False
-    pause_request = False
-    lightshow = Lightshow()  # declare a lightshow object
-    U1 = ShiftRegister(33, 35, 31, 37)  # declare the shift register objects (dataPin, serialClock, latchPin, outEnable)
-    U2 = ShiftRegister(36, 32, 38, 40)
-    U3 = ShiftRegister(11, 7, 13, 15)
-    U4 = ShiftRegister(16, 12, 18, 22)
-    pygame.mixer.init()
-    for audio_file in lightshow.playlist:
-        lightshow.run(audio_file)
+    GPIO.setmode(GPIO.BOARD)  # RPi.GPIO only works on the Raspberry Pi.
+    GPIO.setwarnings(False)
+    raspberry = Pi()  
+    lightshow = Lightshow()
+    U1 = ShiftRegister(33, 31, 35, 37)  # declare the shift register objects (dataPin, serialClock, latchPin, outEnable)
+    U2 = ShiftRegister(38, 36, 40, 32)
+    U3 = ShiftRegister(11, 13, 7, 15)
+    U4 = ShiftRegister(18, 22, 16, 12)
+
+    # for audio_file in lightshow.playlist:
+    #     lightshow.run(audio_file)
