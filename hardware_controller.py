@@ -2,32 +2,47 @@
 The hardware controller handles all interaction with the raspberry pi
 hardware to turn the lights on and off.
 """
+# === CALLBACKS
+def call_next(ch):
+    global next_song
+    next_song = True
+
+    return next_song
+
+def call_prev(ch):
+    global prev_song
+    prev_song = True
+
+    return prev_song
+
+def pause_play(ch):
+    global paused
+    paused = not paused
+
+    return paused
 
 try:  # RPi.GPIO only works on the Raspberry Pi.
     import RPi.GPIO as GPIO
 except RuntimeError:
     print('Error importing RPi.GPIO! This is probably because you need superuser privileges or are not on a raspberry pi.')
-import main
+
 
 class Pi(object):
     def __init__(self):
-        self.next_pin = 24
-        self.prev_pin = 26
-        self.pause_pin = 23
+        self.next_pin = 23
+        self.prev_pin = 19
+        self.pause_pin = 21
 
         self.setup()
     
     def setup(self):
         """create event detect on input pins for button presses"""
-        GPIO.setmode(GPIO.BOARD)  # RPi.GPIO only works on the Raspberry Pi.
-        mode = GPIO.getmode()
-        GPIO.setwarnings(False)
         GPIO.setup(self.next_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)    # set as input (button)  
         GPIO.setup(self.prev_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)    # set as input (button)  
         GPIO.setup(self.pause_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)    # set as input (button)  
-        GPIO.add_event_detect(self.next_pin, GPIO.RISING, callback=main.next_song, bouncetime=300)
-        GPIO.add_event_detect(self.prev_pin, GPIO.RISING, callback=main.prev_song, bouncetime=300)
-        GPIO.add_event_detect(self.pause_pin, GPIO.RISING, callback=main.pause_play, bouncetime=300)
+        GPIO.add_event_detect(self.next_pin, GPIO.RISING, callback=call_next, bouncetime=300)
+        GPIO.add_event_detect(self.prev_pin, GPIO.RISING, callback=call_prev, bouncetime=300)
+        GPIO.add_event_detect(self.pause_pin, GPIO.RISING, callback=pause_play, bouncetime=300)
 
 class ShiftRegister(object):
     def __init__(self, dataPin, serialClock, latchPin,  outEnable):
@@ -39,9 +54,6 @@ class ShiftRegister(object):
         self.setup()
 
     def setup(self):
-        GPIO.setmode(GPIO.BOARD)  # RPi.GPIO only works on the Raspberry Pi.
-        mode = GPIO.getmode()
-        GPIO.setwarnings(False)
         
         GPIO.setup(self.dataPin, GPIO.OUT)
         GPIO.setup(self.serialClock, GPIO.OUT)
@@ -52,6 +64,7 @@ class ShiftRegister(object):
         GPIO.output(self.serialClock, GPIO.LOW)
         GPIO.output(self.latchPin, GPIO.LOW)
         GPIO.output(self.outEnable, GPIO.LOW)
+
         self.clear()
 
     def clear(self):
@@ -71,7 +84,6 @@ class ShiftRegister(object):
         GPIO.output(self.latchPin, GPIO.LOW)
 
     def output(self):
-        pass
         GPIO.output(self.outEnable, GPIO.HIGH)
 
     def inputBit(self, inputValue):

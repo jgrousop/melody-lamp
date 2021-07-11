@@ -106,6 +106,14 @@ class Lightshow(object):
                 if self.song_index > 0:
                     self.song_index -= 1
                 self.run(self.playlist[self.song_index])
+        
+        omxprocess.stdin.write(b'q')  # quit the current music playback process
+        
+        if self.song_index < len(self.playlist):
+            self.song_index += 1 
+        else:
+            self.song_index = 0
+        self.run(self.playlist[self.song_index])
                     
 
 if __name__ == "__main__":  # run the following code if running main.py directly
@@ -117,6 +125,8 @@ if __name__ == "__main__":  # run the following code if running main.py directly
     U2 = ShiftRegister(38, 36, 40, 32)
     U3 = ShiftRegister(11, 13, 7, 15)
     U4 = ShiftRegister(18, 22, 16, 12)
+
+    lightshow.run(lightshow.playlist[lightshow.song_index])
 
     # for audio_file in lightshow.playlist:
     #     lightshow.run(audio_file)
