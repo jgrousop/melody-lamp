@@ -157,7 +157,7 @@ if __name__ == '__main__':
         song_title = audio_file.title().split('\\')[-1].split('.')[0]
         print(song_title)
         print(pickles)
-        import pdb
-        pdb.set_trace()
-        if song_title not in pickles: # change this to search pickles element-by-element
-            current_song = Song(audio_file, song_title)  # create a song object which generates a pickle for the song
+
+        for pic in pickles: 
+            if song_title not in pic:
+                current_song = Song(audio_file, song_title)  # create a song object which generates a pickle for the song
