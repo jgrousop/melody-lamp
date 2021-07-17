@@ -8,6 +8,7 @@ import statistics
 from glob import glob
 import librosa as lr
 import matplotlib.pyplot as plt
+from pydub import AudioSegment
 import numpy as np
 
 
@@ -20,7 +21,6 @@ class Song(object):
                  volumes=[],
                  length=0.0,
                  sample_rate=22050,
-                 channels=2,
                  tempo=0.0,
                  num_chunks=0,
                  freq_bins=[0, 110, 410, 700, 20000],
@@ -33,45 +33,45 @@ class Song(object):
         self.volumes = volumes  # maximum volume for each time chunk
         self.length = length  # song length in [s]
         self.sample_rate = sample_rate  # how many data points of audio data per second of audio length
-        self.channels = channels
         self.tempo = tempo  # song tempo in [bpm]
         self.num_chunks = num_chunks  # how many chunks the song is broken into for frequency analysis
         self.freq_bins = freq_bins  # upper cutoffs of frequency bins [Hz]
-        self.lightshow_data = lightshow_data  # numpy 2d array of binary data x number of freq bins
-        
-        Song.generate_pickle(self)
+        self.lightshow_data = lightshow_data  # 
+        self.amplitude_data = None
+
+        #self.check_extension()
+        self.generate_pickle()
 
     def generate_pickle(self):
         """
         open a pickle of the song data or create one if it doesn't exist.
         """
-        amplitude_data = self.compute_amplitude(self)  # obtain time series data
-        self.beat_tracking(self, amplitude_data=amplitude_data)  # determine beat locations
-        self.compute_lightshow_data(self, amplitude_data=amplitude_data)  # determine binary lists for shift registers
-        disp_song_data = input('plot song data? [Y/N]:   ')
-        if disp_song_data == 'Y' or 'y':
-            self.plot_song_data(self)
+
+        self.compute_amplitude()  # obtain time series data
+        self.beat_tracking()  # determine beat locations
+        self.compute_lightshow_data()  # determine binary lists for shift registers
+        # disp_song_data = input('plot song data? [Y/N]:   ')
+        # if 'Y' in disp_song_data or 'y' in disp_song_data:
+        #     self.plot_song_data()
 
         with open('./song_pickles/{}.pkl'.format(self.title), 'wb') as output:
             pickle.dump(self, output, protocol=4)
 
     def compute_amplitude(self):
-        amplitude_data, self.sample_rate = lr.load(self.file)  # time series amplitude data and sample frequency
-        self.length = len(amplitude_data) / self.sample_rate  # length of song in seconds
+        self.amplitude_data, self.sample_rate = lr.load(self.file)  # time series amplitude data and sample frequency
+        self.length = len(self.amplitude_data) / self.sample_rate  # length of song in seconds
 
-        return amplitude_data
-
-    def beat_tracking(self, amplitude_data):
+    def beat_tracking(self):
         """
         calculate the tempo for the song and use the float value to re-calculate the chunk size.
         Timestamps are set according to the duration between beats.
         """
-        self.tempo, self.timestamps = lr.beat.beat_track(amplitude_data, units='time')
+        self.tempo, self.timestamps = lr.beat.beat_track(self.amplitude_data, units='time')
         self.sleep_times = np.diff(self.timestamps)
         self.sleep_times = np.insert(self.sleep_times, 0, self.timestamps[0])
         self.num_chunks = len(self.sleep_times)  # break the song into chunks of time between each beat
 
-    def compute_lightshow_data(self, amplitude_data):
+    def compute_lightshow_data(self):
         """
         loop through the amplitude_data and determine the volume and contributing frequencies of each time chunk =-=-
         https://makersportal.com/blog/2018/9/13/audio-processing-in-python-part-i-sampling-and-the-fast-fourier-transform
@@ -80,16 +80,16 @@ class Song(object):
         data_array = [[0] * (len(self.freq_bins) - 1) for i in range(self.num_chunks)]
         self.volumes = np.zeros((self.num_chunks,))  # pre-define volume array
         average_freq_vals = np.zeros((len(self.freq_bins) - 1,))  # pre-define freq val array
-        max_amp = max(amplitude_data)
+        max_amp = max(self.amplitude_data)
         for chunk in range(0, self.num_chunks-1):  # loop through song in time chunks
             print('calculating {} / {} chunks'.format(chunk, self.num_chunks))
             n1 = round(self.sample_rate * self.timestamps[chunk])
             n2 = round(self.sample_rate * self.timestamps[chunk + 1])
-            y_k = np.fft.fft(amplitude_data[n1:n2])  # FFT function
+            y_k = np.fft.fft(self.amplitude_data[int(n1):int(n2)])  # FFT function
             y_k = y_k[range(int((n2 - n1) / 2))]  # exclude sampling frequency
             y_k_power = np.abs(y_k)
-            self.volumes[chunk] = max(amplitude_data[round(self.sample_rate * self.timestamps[chunk]):
-                                                     round(self.sample_rate * self.timestamps[chunk + 1])] / max_amp)
+            self.volumes[chunk] = max(self.amplitude_data[int(round(self.sample_rate * self.timestamps[chunk])):
+                                                     int(round(self.sample_rate * self.timestamps[chunk + 1]))] / max_amp)
 
             for i in range(len(self.freq_bins) - 1):  # loop through freq bins and assign average FFT values to each one
                 average_freq_vals[i] = statistics.mean(
@@ -119,13 +119,27 @@ class Song(object):
                     self.lightshow_data[chunk][i] = '11111111'
                 i += 1
 
+    def check_extension(self):
+        if self.file.title().lower().endswith('.wav'):
+            return True
+        elif self.file.title().lower().endswith('.mp3'):
+            print('C:/Users/John Grousopoulos/Documents/melody-lamp/songs/{}.mp3'.format(self.title))
+            print('C:/Users/John Grousopoulos/Documents/melody-lamp/songs/{}.wav'.format(self.title))
+            sound = AudioSegment.from_mp3('C:/Users/John Grousopoulos/Documents/melody-lamp/songs/{}.mp3'.format(self.title))
+            sound.export('C:/Users/John Grousopoulos/Documents/melody-lamp/songs/{}.wav'.format(self.title), format="wav")
+        else:
+            print('Issue with the {} file extension, neither .mp3 nor .wav'.format(self.title))
+
     def plot_song_data(self):
+        # create freq# data arrays before running this
         fig, (ax1, ax2) = plt.subplots(2, 1)
+        import pdb
+        pdb.set_trace()
         ax1.plot(self.amplitude_data)
-        ax2.plot(self.timestamps, self.lightshow_data['F1'], label='F1')
-        ax2.plot(self.timestamps, self.lightshow_data['F2'], label='F2')
-        ax2.plot(self.timestamps, self.lightshow_data['F3'], label='F3')
-        ax2.plot(self.timestamps, self.lightshow_data['F4'], label='F4')
+        ax2.plot(self.timestamps, self.freq1_data, label='F1')
+        ax2.plot(self.timestamps, self.freq2_data, label='F2')
+        ax2.plot(self.timestamps, self.freq3_data, label='F3')
+        ax2.plot(self.timestamps, self.freq4_data, label='F4')
         ax2.set_yscale('log')
         ax2.legend()
 
@@ -135,8 +149,15 @@ class Song(object):
 
         plt.show()
 
-directory = os.getcwd()
-playlist = glob(directory + '/songs/*.wav')
-for audio_file in playlist:
-    song_title = audio_file.title().split('/')[-1].split('.')[0]
-    current_song = Song(audio_file, song_title)  # create a song object which generates a pickle for the song
+if __name__ == '__main__':
+    directory = os.getcwd()
+    playlist = glob(directory + '\songs\*.*')
+    pickles = glob(directory + '\song_pickles\*.pkl')
+    for audio_file in playlist:
+        song_title = audio_file.title().split('\\')[-1].split('.')[0]
+        print(song_title)
+        print(pickles)
+
+        for pic in pickles: 
+            if song_title not in pic:
+                current_song = Song(audio_file, song_title)  # create a song object which generates a pickle for the song

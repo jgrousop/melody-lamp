@@ -29,6 +29,8 @@ from glob import glob
 import random
 import pickle
 from hardware_controller import *
+from song import Song
+from gpiozero import Button
 
 
 class Lightshow(object):
@@ -44,20 +46,59 @@ class Lightshow(object):
         self.current_song = None
         self.current_song_title = ''
         self.music_filetype = 'wav'
+        self.paused = False
+        self.next_pin = 23
+        self.next_button = None
+        self.prev_pin = 19
+        self.prev_button = None
+        self.pause_pin = 21
+        self.pause_button = None
+        self.omxprocess = None
         
+        self.setup()
         self.generate_playlist()
+        
+    
+    def setup(self):
+        """create event detect on input pins for button presses"""
+        self.next_button = Button(self.next_pin, pull_up=False, bounce_time=1)
+        self.next_button.when_pressed = self.go_next
+        self.prev_button = Button(self.prev_pin, pull_up=False, bounce_time=1)
+        self.prev_button.when_pressed = self.go_prev
+        self.pause_button = Button(self.pause_pin, pull_up=False, bounce_time=1)
+        self.pause_button.when_pressed = self.pause_play
+        
+    def go_next(self):
+        print('GO NEXT!')
+        if self.song_index < len(self.playlist):
+            self.song_index += 1 
+        else:
+            self.song_index = 0
+        self.run(self.playlist[self.song_index])
+        
+    def go_prev(self):
+        print('GO PREV!')
+        self.omxprocess.stdin.write(b'q')  # quit the current music playback process
+        if self.song_index > 0:
+            self.song_index -= 1
+        self.run(self.playlist[self.song_index])
+        
+    def pause_play(self):
+        self.paused = not self.paused
+        self.omxprocess.stdin.write(b'p')
+        if self.paused: self.pause_button.wait_for_press() # see if this stops the lights with the music
+
 
     def generate_playlist(self):
         directory = os.getcwd()
         self.playlist = glob(directory + '/songs/*.{}'.format(self.music_filetype))
         random.shuffle(self.playlist)
+        
+        self.run(self.playlist[self.song_index])
 
     def run(self, song):
         """Start the lightshow for a song that has been analyzed"""
-        global paused
-        global next_song
-        global prev_song
-
+        
         self.current_song_title = song.title().split('/')[-1].split('.')[0]
 
         try:  # see if there is a pickle for this song already
@@ -65,10 +106,10 @@ class Lightshow(object):
                 self.current_song = pickle.load(fp)
         except FileNotFoundError:  # no pickle for this song
             print('no pickle for current song: {}'.format(self.current_song_title))
-            Lightshow.go_next()  # move on to the next song if a pickle hasn't been generated yet
+            self.call_next(1)  # move on to the next song if a pickle hasn't been generated yet
             
         # start omxplayer to hear the music
-        omxprocess = subprocess.Popen(['omxplayer','-o','local','/home/pi/lightshow/songs/{}.wav'.format(self.current_song_title)],
+        self.omxprocess = subprocess.Popen(['omxplayer','-o','local','/home/pi/lightshow/songs/{}.wav'.format(self.current_song_title)],
                                 stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,
                                 bufsize=0,
@@ -76,7 +117,7 @@ class Lightshow(object):
 
         sleep(self.current_song.sleep_times[0])  # sleep until the first beat
         
-        for chunk in range(1, len(self.current_song.sleep_times)):
+        for chunk in range(len(self.current_song.sleep_times)):
             U1.readBitList(self.current_song.lightshow_data[chunk][0])
             U2.readBitList(self.current_song.lightshow_data[chunk][1])
             U3.readBitList(self.current_song.lightshow_data[chunk][2])
@@ -87,46 +128,19 @@ class Lightshow(object):
             U3.clear()
             U4.clear()
             sleep(self.current_song.sleep_times[chunk] * 0.245)  # turn the lights off for ~25% of the chunk time
-
-            if paused: # the user has pressed the pause button
-                omxprocess.stdin.write(b'p')
-                while paused:
-                    sleep(0.25)  # keep waiting until the user presses the pause button again
-
-            elif next_song: # the user has pressed the next_song button
-                next_song = False
-                omxprocess.stdin.write(b'q')  # quit the current music playback process
-                if self.song_index < len(self.playlist):
-                    self.song_index += 1 # go back to the first song if next is pressed on the last song
-                self.run(self.playlist[self.song_index])
-
-            elif prev_song: # the user has pressed the prev_song button
-                prev_song = False
-                omxprocess.stdin.write(b'q')  # quit the current music playback process
-                if self.song_index > 0:
-                    self.song_index -= 1
-                self.run(self.playlist[self.song_index])
         
-        omxprocess.stdin.write(b'q')  # quit the current music playback process
-        
-        if self.song_index < len(self.playlist):
-            self.song_index += 1 
+        self.song_index += 1
+        if self.song_index <= len(self.playlist):
+            self.run(self.playlist[self.song_index]) # play the next song
         else:
-            self.song_index = 0
-        self.run(self.playlist[self.song_index])
-                    
+            self.generate_playlist() # re-start from the beginning with a newly randomized list of songs
+
 
 if __name__ == "__main__":  # run the following code if running main.py directly
-    GPIO.setmode(GPIO.BOARD)  # RPi.GPIO only works on the Raspberry Pi.
-    GPIO.setwarnings(False)
-    raspberry = Pi()  
-    lightshow = Lightshow()
+    
     U1 = ShiftRegister(33, 31, 35, 37)  # declare the shift register objects (dataPin, serialClock, latchPin, outEnable)
     U2 = ShiftRegister(38, 36, 40, 32)
     U3 = ShiftRegister(11, 13, 7, 15)
     U4 = ShiftRegister(18, 22, 16, 12)
 
-    lightshow.run(lightshow.playlist[lightshow.song_index])
-
-    # for audio_file in lightshow.playlist:
-    #     lightshow.run(audio_file)
+    lightshow = Lightshow()
