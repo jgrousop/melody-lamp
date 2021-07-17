@@ -2,33 +2,7 @@
 The hardware controller handles all interaction with the raspberry pi
 hardware to turn the lights on and off.
 """
-
-# try:  # RPi.GPIO only works on the Raspberry Pi.
-#     import RPi.GPIO as GPIO
-# except RuntimeError:
-#     print('Error importing RPi.GPIO! This is probably because you need superuser privileges.')
-import pygame
-
-# event handlers ===
-def next_song(channel):
-    print('inside the next_channel event handler')
-
-
-def prev_song(channel):
-    print('inside the prev_channel event handler')
-
-
-def pause_play(channel):
-    print('inside pause_play event handler')
-
-    if paused:
-        print('starting to play after being paused')
-        pygame.mixer.music.play()
-        paused = False
-    else:
-        print('pausing song...')
-        pygame.mixer.music.pause()
-        paused = True
+from gpiozero import DigitalOutputDevice
 
 
 class ShiftRegister(object):
@@ -37,58 +11,55 @@ class ShiftRegister(object):
         self.serialClock = serialClock
         self.latchPin = latchPin
         self.outEnable = outEnable
+        self.shift_data = None
+        self.shift_clock = None
+        self.shift_latch = None
+        self.shift_out = None
 
         self.setup()
 
     def setup(self):
-        # GPIO.setmode(GPIO.BOARD)  # RPi.GPIO only works on the Raspberry Pi.
-        # mode = GPIO.getmode()
-        # GPIO.setwarnings(False)
-        #
-        # GPIO.setup(self.dataPin, GPIO.OUT)
-        # GPIO.setup(self.serialClock, GPIO.OUT)
-        # GPIO.setup(self.latchPin, GPIO.OUT)
-        # GPIO.setup(self.outEnable, GPIO.OUT)
-        #
-        # GPIO.output(self.dataPin, GPIO.LOW)
-        # GPIO.output(self.serialClock, GPIO.LOW)
-        # GPIO.output(self.latchPin, GPIO.LOW)
-        # GPIO.output(self.outEnable, GPIO.LOW)
+        
+        self.shift_data = DigitalOutputDevice(self.dataPin) # all are low to begin with
+        self.shift_clock = DigitalOutputDevice(self.serialClock)
+        self.shift_latch = DigitalOutputDevice(self.latchPin)
+        self.shift_out = DigitalOutputDevice(self.outEnable)
+
         self.clear()
 
     def clear(self):
         """ clears all the LEDs by pulsing the serial clock 8 times and the latch pin once. """
-        # GPIO.output(self.dataPin, GPIO.LOW)
-        # for x in range(0, 8):  # Clears out all the values currently in the register
-        #     GPIO.output(self.serialClock, GPIO.LOW)
-        #     GPIO.output(self.serialClock, GPIO.HIGH)
-        #     GPIO.output(self.serialClock, GPIO.LOW)
+        self.shift_data.off()
+        for x in range(0, 8):  # Clears out all the values currently in the register
+            self.shift_clock.off()
+            self.shift_clock.on()
+            self.shift_clock.off()
 
         self.latch()
 
     def latch(self):
         """ pulses the latch pin for writing to the storage register from the shift register"""
-        # GPIO.output(self.latchPin, GPIO.LOW)
-        # GPIO.output(self.latchPin, GPIO.HIGH)
-        # GPIO.output(self.latchPin, GPIO.LOW)
+        self.shift_latch.off()
+        self.shift_latch.on()
+        self.shift_latch.off()
 
     def output(self):
-        pass
-        # GPIO.output(self.outEnable, GPIO.HIGH)
+        self.shift_out.on()
 
     def inputBit(self, inputValue):
         """
         sets the data pin to the correct bit value then pulses the serial clock pin to shift in the bit.
         """
-        # GPIO.output(self.dataPin, inputValue)
-        #
-        # GPIO.output(self.serialClock, GPIO.LOW)
-        # GPIO.output(self.serialClock, GPIO.HIGH)
-        # GPIO.output(self.serialClock, GPIO.LOW)
+        self.shift_data.off()
+        if inputValue == 1: self.shift_data.on()
+        
+        self.shift_clock.off()
+        self.shift_clock.on()
+        self.shift_clock.off()
 
     def readBitList(self, bit_list):
         """reads in a string of 1's and 0's and shifts the bits into the shift register."""
-        # for element in bit_list:
-        #     self.inputBit(int(element))
-        # self.latch()
-        # self.output()
+        for element in bit_list:
+            self.inputBit(int(element))
+        self.latch()
+        self.output()
